@@ -1,0 +1,11 @@
+plugins {
+    id 'net.ltgt.apt-idea' version '0.14'
+}
+
+dependencies {
+    annotationProcessor project(':processor')
+
+    implementation project(':library')
+
+    implementation 'com.google.auto.factory:auto-factory:1.0-beta5'
+}
