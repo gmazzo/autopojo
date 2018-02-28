@@ -23,7 +23,6 @@ import gs.autopojo.processor.tasks.ProcessClassTask;
 import gs.autopojo.processor.tasks.WriteGenClassTask;
 import io.reactivex.Completable;
 import io.reactivex.Single;
-import io.reactivex.schedulers.Schedulers;
 
 @AutoService(Processor.class)
 @SupportedAnnotationTypes("gs.autopojo.POJO")
@@ -48,7 +47,6 @@ public class POJOProcessor extends AbstractProcessor {
         }
 
         Completable.mergeDelayError(tasks)
-                .subscribeOn(Schedulers.computation())
                 .blockingAwait();
         return true;
     }
