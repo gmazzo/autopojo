@@ -15,9 +15,9 @@ public @interface ExtraAnnotation {
 
     Member[] members() default {};
 
-    public @interface Member {
+    @interface Member {
 
-        String name();
+        String name() default "value";
 
         /**
          * @see <a href="https://github.com/square/javapoet#l-for-literals">JavaPoet formats<a/>

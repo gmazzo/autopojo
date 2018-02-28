@@ -132,12 +132,12 @@ public class ProcessClassTask implements Callable<GenClass> {
                 .addMethod(MethodSpec.methodBuilder("get" + methodSuffix)
                         .addModifiers(modifiers)
                         .returns(typeName)
-                        .addCode("return $N;", name)
+                        .addCode("return $N;\n", name)
                         .build())
                 .addMethod(MethodSpec.methodBuilder("set" + methodSuffix)
                         .addModifiers(modifiers)
                         .addParameter(typeName, name)
-                        .addCode("this.$1N = $1N;", name)
+                        .addCode("this.$1N = $1N;\n", name)
                         .build());
     }
 

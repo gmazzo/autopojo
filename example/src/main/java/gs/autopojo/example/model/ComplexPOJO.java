@@ -33,7 +33,7 @@ public interface ComplexPOJO<T extends ComplexPOJO.Models.Item> extends Cloneabl
     @POJO
     @Singleton
     @ExtraAnnotation(value = "javax.inject.Named",
-            members = @ExtraAnnotation.Member(name = "value", format = "$S", value = "aPair"))
+            members = @ExtraAnnotation.Member(format = "$S", value = "aPair"))
     interface Pair<A, B> {
 
         A a();
