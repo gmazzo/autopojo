@@ -5,10 +5,10 @@ import java.util.List;
 import gs.autopojo.POJO;
 
 @POJO
-public interface EmploeePOJO extends PersonPOJO {
+public interface EmployeePOJO extends PersonPOJO {
 
     String area();
 
-    List<EmploeePOJO> subordinates();
+    List<EmployeePOJO> subordinates();
 
 }
