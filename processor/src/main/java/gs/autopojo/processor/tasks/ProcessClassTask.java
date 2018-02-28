@@ -3,6 +3,7 @@ package gs.autopojo.processor.tasks;
 import com.google.auto.common.MoreTypes;
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
@@ -13,12 +14,12 @@ import com.squareup.javapoet.TypeVariableName;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.annotation.Generated;
 import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
@@ -33,7 +34,6 @@ import gs.autopojo.ExtraAnnotation;
 import gs.autopojo.ExtraAnnotations;
 import gs.autopojo.POJO;
 
-import static com.google.auto.common.AnnotationMirrors.getAnnotationValue;
 import static com.google.auto.common.MoreElements.asExecutable;
 import static com.google.auto.common.MoreElements.asType;
 import static com.google.auto.common.MoreElements.asVariable;
@@ -47,37 +47,86 @@ import static gs.autopojo.processor.tasks.NamesHelper.resolve;
 public class ProcessClassTask implements Callable<GenClass> {
     private final Elements elements;
     private final TypeElement element;
+    private final POJO pojo;
+    private ClassName className;
+    private TypeSpec.Builder classSpec;
+    private ClassName builderClassName;
+    private List<TypeVariableName> classVariables;
+    private TypeSpec.Builder builderSpec;
+    private CodeBlock.Builder builderBuildCode;
+    private TypeName builderType;
 
     public ProcessClassTask(Elements elements, TypeElement element) {
         this.elements = elements;
         this.element = element;
+        this.pojo = element.getAnnotation(POJO.class);
     }
 
     @Override
     public GenClass call() {
-        ClassName name = getName(element);
+        Consumer<Element> throwIfMissing = $ -> {
+            throw new IllegalArgumentException("Missing " + POJO.class + " annotation on " + $);
+        };
 
-        TypeSpec.Builder classSpec = buildClassSpec(name);
+        if (pojo == null) {
+            throwIfMissing.accept(element);
+        }
+        for (Element parent = element.getEnclosingElement(); isType(parent); parent = parent.getEnclosingElement()) {
+            if (parent.getAnnotation(POJO.class) == null) {
+                throwIfMissing.accept(parent);
+            }
+        }
 
-        processElements(classSpec,
-                collectModifiers(element, Modifier.ABSTRACT, Modifier.STATIC), element);
+        className = getName(element);
+        buildClassSpec();
+        buildBuilderClassSpec();
 
-        return new GenClass(name, element, classSpec);
+        processElements();
+
+        if (builderSpec != null) {
+            builderBuildCode.add("return instance;\n");
+
+            classSpec.addType(builderSpec
+                    .addMethod(MethodSpec.methodBuilder("build")
+                            .addModifiers(Modifier.PUBLIC)
+                            .returns(builderType)
+                            .addCode(builderBuildCode.build())
+                            .build())
+                    .build());
+        }
+        return new GenClass(className, element, classSpec);
     }
 
-    private TypeSpec.Builder buildClassSpec(ClassName name) {
-        return TypeSpec.classBuilder(name)
+    private void buildClassSpec() {
+        classVariables = collectTypeVariables(element);
+        classSpec = TypeSpec.classBuilder(className)
                 .addOriginatingElement(element)
                 .addModifiers(collectModifiers(element, Modifier.ABSTRACT))
-                .addAnnotations(collectAnnotations(element))
-                .addTypeVariables(element.getTypeParameters().stream()
-                        .map(TypeVariableName::get)
-                        .map($ -> resolve(elements, $))
-                        .collect(Collectors.toList()))
+                .addAnnotations(collectAnnotations(element, null))
+                .addTypeVariables(classVariables)
                 .addSuperinterfaces(collectInterfaces(element));
     }
 
-    private void processElements(TypeSpec.Builder classSpec, Modifier[] modifiers, TypeElement element) {
+    private void buildBuilderClassSpec() {
+        if (pojo.builder()) {
+
+            builderClassName = className.nestedClass("Builder");
+            builderSpec = TypeSpec.classBuilder(builderClassName.simpleName())
+                    .addOriginatingElement(element)
+                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                    .addTypeVariables(classVariables);
+            builderType = classVariables.isEmpty() ? className :
+                    ParameterizedTypeName.get(className, element.getTypeParameters().stream()
+                            .map($ -> TypeName.get($.asType()))
+                            .toArray(TypeName[]::new));
+            builderBuildCode = CodeBlock.builder()
+                    .add("$1T instance = new $1T();\n", builderType);
+        }
+    }
+
+    private void processElements() {
+        Modifier[] modifiers = collectModifiers(element, Modifier.ABSTRACT, Modifier.STATIC);
+
         for (Element member : element.getEnclosedElements()) {
             String name = member.getSimpleName().toString();
 
@@ -85,20 +134,20 @@ public class ProcessClassTask implements Callable<GenClass> {
                 case METHOD:
                     ExecutableElement method = (ExecutableElement) member;
                     if (method.getParameters().isEmpty()) {
-                        addField(classSpec, member, name, modifiers, method.getReturnType());
+                        addField(member, name, modifiers, method.getReturnType());
                         continue;
                     }
                     break;
 
                 case FIELD:
                     if (member.getModifiers().contains(Modifier.STATIC)) {
-                        addConstant(classSpec, asVariable(member));
+                        addConstant(asVariable(member));
                         continue;
                     }
                     break;
 
                 case ENUM:
-                    addEnum(classSpec, asType(member));
+                    addEnum(asType(member));
                     continue;
             }
 
@@ -120,28 +169,49 @@ public class ProcessClassTask implements Callable<GenClass> {
                 .forEachOrdered(classSpec::superclass);
     }
 
-    private void addField(TypeSpec.Builder classSpec, Element member, String name, Modifier[] modifiers, TypeMirror type) {
+    private void addField(Element member, String name, Modifier[] modifiers, TypeMirror type) {
         final String methodSuffix = name.substring(0, 1).toUpperCase() + name.substring(1);
 
         TypeName typeName = resolve(elements, TypeName.get(type));
 
         classSpec
                 .addField(FieldSpec.builder(typeName, name, Modifier.PRIVATE)
-                        .addAnnotations(collectAnnotations(member))
+                        .addAnnotations(collectAnnotations(member, ExtraAnnotation.ApplyOn.FIELD))
                         .build())
                 .addMethod(MethodSpec.methodBuilder("get" + methodSuffix)
                         .addModifiers(modifiers)
+                        .addAnnotations(collectAnnotations(member, ExtraAnnotation.ApplyOn.GETTER))
                         .returns(typeName)
                         .addCode("return $N;\n", name)
                         .build())
                 .addMethod(MethodSpec.methodBuilder("set" + methodSuffix)
                         .addModifiers(modifiers)
+                        .addAnnotations(collectAnnotations(member, ExtraAnnotation.ApplyOn.SETTER))
                         .addParameter(typeName, name)
                         .addCode("this.$1N = $1N;\n", name)
                         .build());
+
+        if (builderSpec != null) {
+            builderSpec
+                    .addField(FieldSpec.builder(typeName, name, Modifier.PRIVATE)
+                            .build())
+                    .addMethod(MethodSpec.methodBuilder(name)
+                            .addModifiers(Modifier.PUBLIC)
+                            .returns(typeName)
+                            .addCode("return $1N;\n", name)
+                            .build())
+                    .addMethod(MethodSpec.methodBuilder(name)
+                            .addModifiers(Modifier.PUBLIC)
+                            .addParameter(typeName, name)
+                            .returns(builderClassName)
+                            .addCode("this.$1N = $1N;\nreturn this;\n", name)
+                            .build());
+
+            builderBuildCode.add("instance.$1N = $1N;\n", name);
+        }
     }
 
-    private void addConstant(TypeSpec.Builder classSpec, VariableElement element) {
+    private void addConstant(VariableElement element) {
         TypeName typeName = resolve(elements, TypeName.get(element.asType()));
         String name = element.getSimpleName().toString();
         Object value = getFieldInitExpression(elements, element);
@@ -151,7 +221,7 @@ public class ProcessClassTask implements Callable<GenClass> {
                 .build());
     }
 
-    private void addEnum(TypeSpec.Builder classSpec, TypeElement element) {
+    private void addEnum(TypeElement element) {
         TypeSpec.Builder enumSpec = TypeSpec.enumBuilder(element.getSimpleName().toString())
                 .addOriginatingElement(element)
                 .addModifiers(collectModifiers(element, Modifier.FINAL));
@@ -191,40 +261,47 @@ public class ProcessClassTask implements Callable<GenClass> {
                 .toArray(Modifier[]::new);
     }
 
-    private List<AnnotationSpec> collectAnnotations(Element element) {
+    private List<AnnotationSpec> collectAnnotations(Element element, ExtraAnnotation.ApplyOn applyOn) {
         List<TypeName> toRemove = Arrays.asList(TypeName.get(POJO.class), TypeName.get(Generated.class));
 
-        return element.getAnnotationMirrors().stream()
-                .flatMap(this::expandExtraAnnotations)
+        return elements.getAllAnnotationMirrors(element).stream()
+                .flatMap($ -> expandExtraAnnotations(element, $, applyOn))
                 .filter($ -> !toRemove.contains($.type))
                 .collect(Collectors.toList());
     }
 
-    @SuppressWarnings("unchecked")
-    private Stream<AnnotationSpec> expandExtraAnnotations(AnnotationMirror mirror) {
-        if (isTypeOf(ExtraAnnotations.class, mirror.getAnnotationType())) {
-            List<AnnotationValue> value = (List<AnnotationValue>) getAnnotationValue(mirror, "value").getValue();
+    private List<TypeVariableName> collectTypeVariables(TypeElement element) {
+        return element.getTypeParameters().stream()
+                .map(TypeVariableName::get)
+                .map($ -> resolve(elements, $))
+                .collect(Collectors.toList());
+    }
 
-            return value.stream()
-                    .map($ -> (AnnotationMirror) $.getValue())
-                    .flatMap(this::expandExtraAnnotations);
+    @SuppressWarnings("unchecked")
+    private Stream<AnnotationSpec> expandExtraAnnotations(Element element, AnnotationMirror mirror, ExtraAnnotation.ApplyOn applyOn) {
+        if (isTypeOf(ExtraAnnotations.class, mirror.getAnnotationType())) {
+            ExtraAnnotations annotations = element.getAnnotation(ExtraAnnotations.class);
+
+            return Stream.of(annotations.value())
+                    .flatMap($ -> buildExtraAnnotationSpec($, applyOn));
 
         } else if (isTypeOf(ExtraAnnotation.class, mirror.getAnnotationType())) {
-            String className = (String) getAnnotationValue(mirror, "value").getValue();
-            List<AnnotationValue> members = (List<AnnotationValue>) getAnnotationValue(mirror, "members").getValue();
+            ExtraAnnotation annotation = element.getAnnotation(ExtraAnnotation.class);
 
-            AnnotationSpec.Builder builder = AnnotationSpec.builder(ClassName.bestGuess(className));
-            for (AnnotationValue member : members) {
-                AnnotationMirror memberMirror = (AnnotationMirror) member.getValue();
-                String name = (String) getAnnotationValue(memberMirror, "name").getValue();
-                String format = (String) getAnnotationValue(memberMirror, "format").getValue();
-                String value = (String) getAnnotationValue(memberMirror, "value").getValue();
+            return buildExtraAnnotationSpec(annotation, applyOn);
+        }
+        return Stream.of(AnnotationSpec.get(mirror));
+    }
 
-                builder.addMember(name, format, value);
+    private Stream<AnnotationSpec> buildExtraAnnotationSpec(ExtraAnnotation annotation, ExtraAnnotation.ApplyOn applyOn) {
+        if (applyOn == null || Arrays.asList(annotation.applyOn()).contains(applyOn)) {
+            AnnotationSpec.Builder builder = AnnotationSpec.builder(ClassName.bestGuess(annotation.value()));
+            for (ExtraAnnotation.Member member : annotation.members()) {
+                builder.addMember(member.name(), member.format(), member.value());
             }
             return Stream.of(builder.build());
         }
-        return Stream.of(AnnotationSpec.get(mirror));
+        return Stream.empty();
     }
 
     private List<TypeName> collectInterfaces(TypeElement element) {

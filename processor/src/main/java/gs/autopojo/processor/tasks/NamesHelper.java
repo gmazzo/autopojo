@@ -10,15 +10,12 @@ import com.squareup.javapoet.WildcardTypeName;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
 
 import gs.autopojo.POJO;
 
-import static com.google.auto.common.AnnotationMirrors.getAnnotationValue;
 import static com.google.auto.common.MoreElements.asType;
-import static com.google.auto.common.MoreElements.getAnnotationMirror;
 import static com.google.auto.common.MoreElements.getPackage;
 import static com.google.auto.common.MoreElements.isType;
 
@@ -26,26 +23,17 @@ final class NamesHelper {
     private static final String SUFFIX_POJO = "POJO";
 
     public static ClassName getName(TypeElement element) {
-        return getName(element, true);
-    }
-
-    public static ClassName getName(TypeElement element, boolean throwIfMissing) {
         if (element == null) {
             return null;
         }
 
         ClassName parent = isType(element.getEnclosingElement()) ?
-                getName(asType(element.getEnclosingElement()), throwIfMissing) : null;
+                getName(asType(element.getEnclosingElement())) : null;
 
-        AnnotationMirror mirror = getAnnotationMirror(element, POJO.class).orNull();
-        if (mirror == null && parent == null && throwIfMissing) {
-            throw new IllegalArgumentException("Missing @" + POJO.class + " in " + element);
-        }
-
-        String name = mirror == null ? "" :
-                getAnnotationValue(mirror, "value").getValue().toString();
+        POJO pojo = element.getAnnotation(POJO.class);
+        String name = pojo == null ? "" : pojo.value();
         if (name.matches("\\s*")) {
-            name = getDefaultName(element, parent == null && mirror != null);
+            name = getDefaultName(element, parent == null && pojo != null);
         }
 
         return parent != null ? parent.nestedClass(name) :
@@ -74,7 +62,7 @@ final class NamesHelper {
         if (name instanceof ClassName) {
             String qualifiedName = getQualifiedName((ClassName) name);
             TypeElement element = elements.getTypeElement(qualifiedName);
-            return (T) getName(element, false);
+            return (T) getName(element);
 
         } else if (name instanceof TypeVariableName) {
             TypeVariableName tvName = (TypeVariableName) name;

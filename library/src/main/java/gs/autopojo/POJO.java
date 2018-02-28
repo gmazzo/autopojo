@@ -11,4 +11,6 @@ public @interface POJO {
 
     String value() default "";
 
+    boolean builder() default true;
+
 }

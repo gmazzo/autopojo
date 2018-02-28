@@ -15,6 +15,8 @@ public @interface ExtraAnnotation {
 
     Member[] members() default {};
 
+    ApplyOn[] applyOn() default {ApplyOn.FIELD};
+
     @interface Member {
 
         String name() default "value";
@@ -25,6 +27,12 @@ public @interface ExtraAnnotation {
         String format() default "$L";
 
         String value();
+
+    }
+
+    enum ApplyOn {
+
+        FIELD, GETTER, SETTER
 
     }
 

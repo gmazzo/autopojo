@@ -26,7 +26,7 @@ public interface ComplexPOJO<T extends ComplexPOJO.Models.Item> extends Cloneabl
 
     List<Pair<T, ? super Models.Item>> values();
 
-    @ExtraAnnotation("java.lang.Deprecated")
+    @ExtraAnnotation(value = "java.lang.Deprecated", applyOn = {ExtraAnnotation.ApplyOn.GETTER, ExtraAnnotation.ApplyOn.SETTER})
     @ExtraAnnotation("javax.inject.Singleton")
     Status status();
 
@@ -42,8 +42,10 @@ public interface ComplexPOJO<T extends ComplexPOJO.Models.Item> extends Cloneabl
 
     }
 
+    @POJO(builder = false)
     interface Models {
 
+        @POJO
         interface Item<K extends CharSequence & Serializable, V> extends FoodModel {
 
             Map.Entry<K, V> id();
