@@ -3,6 +3,7 @@ package gs.autopojo.example.model;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import javax.inject.Singleton;
 
@@ -12,6 +13,12 @@ import gs.autopojo.POJO;
 @POJO("ComplexEntity")
 @Singleton
 public interface ComplexPOJO<T extends ComplexPOJO.Models.Item> extends Cloneable {
+
+    String CONSTANT1 = "aConstant";
+
+    int CONSTANT2 = 4;
+
+    Pattern CONSTANT3 = Pattern.compile("a*\\D{2}b+");
 
     long id();
 

@@ -24,6 +24,7 @@ import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
@@ -38,6 +39,7 @@ import static com.google.auto.common.MoreElements.asType;
 import static com.google.auto.common.MoreElements.asVariable;
 import static com.google.auto.common.MoreElements.isType;
 import static com.google.auto.common.MoreTypes.isTypeOf;
+import static gs.autopojo.processor.ElementsUtils.getFieldInitExpression;
 import static gs.autopojo.processor.tasks.NamesHelper.getName;
 import static gs.autopojo.processor.tasks.NamesHelper.getQualifiedName;
 import static gs.autopojo.processor.tasks.NamesHelper.resolve;
@@ -80,13 +82,6 @@ public class ProcessClassTask implements Callable<GenClass> {
             String name = member.getSimpleName().toString();
 
             switch (member.getKind()) {
-                case CONSTRUCTOR:
-                    if (((ExecutableElement) member).getParameters().isEmpty()) {
-                        // skip default constructor
-                        continue;
-                    }
-                    break;
-
                 case METHOD:
                     ExecutableElement method = (ExecutableElement) member;
                     if (method.getParameters().isEmpty()) {
@@ -96,11 +91,14 @@ public class ProcessClassTask implements Callable<GenClass> {
                     break;
 
                 case FIELD:
-                    addField(classSpec, member, name, modifiers, member.asType());
-                    continue;
+                    if (member.getModifiers().contains(Modifier.STATIC)) {
+                        addConstant(classSpec, asVariable(member));
+                        continue;
+                    }
+                    break;
 
                 case ENUM:
-                    classSpec.addType(buildEnumSpec(asType(member)));
+                    addEnum(classSpec, asType(member));
                     continue;
             }
 
@@ -143,8 +141,18 @@ public class ProcessClassTask implements Callable<GenClass> {
                         .build());
     }
 
-    private TypeSpec buildEnumSpec(TypeElement element) {
-        TypeSpec.Builder spec = TypeSpec.enumBuilder(element.getSimpleName().toString())
+    private void addConstant(TypeSpec.Builder classSpec, VariableElement element) {
+        TypeName typeName = resolve(elements, TypeName.get(element.asType()));
+        String name = element.getSimpleName().toString();
+        Object value = getFieldInitExpression(elements, element);
+
+        classSpec.addField(FieldSpec.builder(typeName, name, collectModifiers(element))
+                .initializer("$L", value)
+                .build());
+    }
+
+    private void addEnum(TypeSpec.Builder classSpec, TypeElement element) {
+        TypeSpec.Builder enumSpec = TypeSpec.enumBuilder(element.getSimpleName().toString())
                 .addOriginatingElement(element)
                 .addModifiers(collectModifiers(element, Modifier.FINAL));
 
@@ -157,7 +165,7 @@ public class ProcessClassTask implements Callable<GenClass> {
                     }
 
                 case ENUM_CONSTANT:
-                    spec.addEnumConstant(asVariable(member).getSimpleName().toString());
+                    enumSpec.addEnumConstant(asVariable(member).getSimpleName().toString());
                     break;
 
                 case METHOD:
@@ -172,7 +180,8 @@ public class ProcessClassTask implements Callable<GenClass> {
 
             }
         }
-        return spec.build();
+
+        classSpec.addType(enumSpec.build());
     }
 
     private Modifier[] collectModifiers(Element element, Modifier... ignore) {

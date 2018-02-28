@@ -19,6 +19,9 @@ public @interface ExtraAnnotation {
 
         String name();
 
+        /**
+         * @see <a href="https://github.com/square/javapoet#l-for-literals">JavaPoet formats<a/>
+         */
         String format() default "$L";
 
         String value();
