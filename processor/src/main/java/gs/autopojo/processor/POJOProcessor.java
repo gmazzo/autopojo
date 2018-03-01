@@ -52,7 +52,10 @@ public class POJOProcessor extends AbstractProcessor {
     }
 
     private Completable scheduleTask(TypeElement element) {
-        return Single.fromCallable(new ProcessClassTask(processingEnv.getElementUtils(), element))
+        return Single.fromCallable(new ProcessClassTask(
+                processingEnv.getTypeUtils(),
+                processingEnv.getElementUtils(),
+                element))
                 .filter($ -> $.name.enclosingClassName() == null) // only write top-level classes
                 .doOnSuccess($ -> $.typeSpec.addAnnotation(AnnotationSpec.builder(Generated.class)
                         .addMember("value", "$S", getClass().getCanonicalName())

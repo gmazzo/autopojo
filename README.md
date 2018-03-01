@@ -8,11 +8,11 @@ Say you have:
 
 ```java
 @POJO
-interface SomeClassPOJO {
-  
-  String propA();
-  
-  List<Integer> propB();
+public interface PersonPOJO {
+
+    int id();
+
+    String name();
 
 }
 ```
@@ -20,60 +20,62 @@ interface SomeClassPOJO {
 AutoPOJO will generate:
 
 ```java
-import java.lang.Integer;
 import java.lang.String;
-import java.util.List;
 import javax.annotation.Generated;
 
 @Generated("gs.autopojo.processor.POJOProcessor")
-class SomeClass {
-  private String propA;
+public class Person {
+  private int id;
 
-  private List<Integer> propB;
+  private String name;
 
-  String getPropA() {
-    return propA;
+  public int getId() {
+    return id;
   }
 
-  void setPropA(String propA) {
-    this.propA = propA;
+  public void setId(int id) {
+    this.id = id;
   }
 
-  List<Integer> getPropB() {
-    return propB;
+  public String getName() {
+    return name;
   }
 
-  void setPropB(List<Integer> propB) {
-    this.propB = propB;
+  public void setName(String name) {
+    this.name = name;
   }
 
   public static class Builder {
-    private String propA;
+    private int id;
 
-    private List<Integer> propB;
+    private String name;
 
-    public String propA() {
-      return propA;
+    public int id() {
+      return id;
     }
 
-    public Builder propA(String propA) {
-      this.propA = propA;
+    public Builder id(int id) {
+      this.id = id;
       return this;
     }
 
-    public List<Integer> propB() {
-      return propB;
+    public String name() {
+      return name;
     }
 
-    public Builder propB(List<Integer> propB) {
-      this.propB = propB;
+    public Builder name(String name) {
+      this.name = name;
       return this;
     }
 
-    public SomeClass build() {
-      SomeClass instance = new SomeClass();
-      instance.propA = propA;
-      instance.propB = propB;
+    protected void fillInstance(Person instance) {
+      instance.id = id;
+      instance.name = name;
+    }
+
+    public Person build() {
+      Person instance = new Person();
+      fillInstance(instance);
       return instance;
     }
   }

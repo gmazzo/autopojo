@@ -29,6 +29,7 @@ import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 
 import gs.autopojo.ExtraAnnotation;
 import gs.autopojo.ExtraAnnotations;
@@ -37,6 +38,7 @@ import gs.autopojo.POJO;
 import static com.google.auto.common.MoreElements.asExecutable;
 import static com.google.auto.common.MoreElements.asType;
 import static com.google.auto.common.MoreElements.asVariable;
+import static com.google.auto.common.MoreElements.getLocalAndInheritedMethods;
 import static com.google.auto.common.MoreElements.isType;
 import static com.google.auto.common.MoreTypes.isTypeOf;
 import static gs.autopojo.processor.ElementsUtils.getFieldInitExpression;
@@ -45,18 +47,22 @@ import static gs.autopojo.processor.tasks.NamesHelper.getQualifiedName;
 import static gs.autopojo.processor.tasks.NamesHelper.resolve;
 
 public class ProcessClassTask implements Callable<GenClass> {
+    private final Types types;
     private final Elements elements;
     private final TypeElement element;
     private final POJO pojo;
     private ClassName className;
+    private TypeName classType;
+    private TypeName classSuper;
+    private TypeElement classSuperElement;
     private TypeSpec.Builder classSpec;
-    private ClassName builderClassName;
     private List<TypeVariableName> classVariables;
+    private ClassName builderClassName;
     private TypeSpec.Builder builderSpec;
-    private CodeBlock.Builder builderBuildCode;
-    private TypeName builderType;
+    private CodeBlock.Builder builderFillInstance;
 
-    public ProcessClassTask(Elements elements, TypeElement element) {
+    public ProcessClassTask(Types types, Elements elements, TypeElement element) {
+        this.types = types;
         this.elements = elements;
         this.element = element;
         this.pojo = element.getAnnotation(POJO.class);
@@ -84,13 +90,16 @@ public class ProcessClassTask implements Callable<GenClass> {
         processElements();
 
         if (builderSpec != null) {
-            builderBuildCode.add("return instance;\n");
-
             classSpec.addType(builderSpec
+                    .addMethod(MethodSpec.methodBuilder("fillInstance")
+                            .addModifiers(Modifier.PROTECTED)
+                            .addParameter(classType, "instance")
+                            .addCode(builderFillInstance.build())
+                            .build())
                     .addMethod(MethodSpec.methodBuilder("build")
                             .addModifiers(Modifier.PUBLIC)
-                            .returns(builderType)
-                            .addCode(builderBuildCode.build())
+                            .returns(classType)
+                            .addCode("$1T instance = new $1T();\nfillInstance(instance);\nreturn instance;\n", classType)
                             .build())
                     .build());
         }
@@ -99,28 +108,80 @@ public class ProcessClassTask implements Callable<GenClass> {
 
     private void buildClassSpec() {
         classVariables = collectTypeVariables(element);
+
         classSpec = TypeSpec.classBuilder(className)
                 .addOriginatingElement(element)
                 .addModifiers(collectModifiers(element, Modifier.ABSTRACT))
                 .addAnnotations(collectAnnotations(element, null))
                 .addTypeVariables(classVariables)
                 .addSuperinterfaces(collectInterfaces(element));
+
+        classType = classVariables.isEmpty() ? className :
+                ParameterizedTypeName.get(className, element.getTypeParameters().stream()
+                        .map($ -> TypeName.get($.asType()))
+                        .toArray(TypeName[]::new));
+
+        TypeElement[] classSupers = Stream.concat(Stream.of(element.getSuperclass()), element.getInterfaces().stream())
+                .filter($ -> $.getKind() == TypeKind.DECLARED)
+                .map(MoreTypes::asTypeElement)
+                .filter($ -> $.getAnnotation(POJO.class) != null)
+                .toArray(TypeElement[]::new);
+
+        switch (classSupers.length) {
+            case 0:
+                break;
+
+            case 1:
+                classSuperElement = classSupers[0];
+                classSpec.superclass(classSuper = resolve(elements, ClassName.get(classSuperElement)));
+                break;
+
+            default:
+                throw new IllegalArgumentException("More than 1 " + POJO.class + " as superclass on " + element);
+        }
     }
 
     private void buildBuilderClassSpec() {
         if (pojo.builder()) {
-
             builderClassName = className.nestedClass("Builder");
             builderSpec = TypeSpec.classBuilder(builderClassName.simpleName())
                     .addOriginatingElement(element)
                     .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                     .addTypeVariables(classVariables);
-            builderType = classVariables.isEmpty() ? className :
-                    ParameterizedTypeName.get(className, element.getTypeParameters().stream()
-                            .map($ -> TypeName.get($.asType()))
-                            .toArray(TypeName[]::new));
-            builderBuildCode = CodeBlock.builder()
-                    .add("$1T instance = new $1T();\n", builderType);
+            builderFillInstance = CodeBlock.builder();
+
+            if (classSuper != null) {
+                builderFillInstance.add("super.fillInstance(instance);\n");
+
+                TypeName superClass;
+                if (classSuper instanceof ParameterizedTypeName) {
+                    ParameterizedTypeName ptName = (ParameterizedTypeName) classSuper;
+
+                    superClass = ParameterizedTypeName.get(
+                            ptName.rawType.nestedClass(builderClassName.simpleName()),
+                            ptName.typeArguments.toArray(new TypeName[ptName.typeArguments.size()]));
+                } else {
+                    superClass = ((ClassName) classSuper).nestedClass(builderClassName.simpleName());
+                }
+                builderSpec.superclass(superClass);
+
+                // adds superclass overrides
+                getLocalAndInheritedMethods(classSuperElement, types, elements).stream()
+                        .filter($ -> $.getKind() == ElementKind.METHOD)
+                        .map($ -> {
+                            String name = $.getSimpleName().toString();
+                            TypeName typeName = TypeName.get($.getReturnType());
+
+                            return MethodSpec.methodBuilder(name)
+                                    .addModifiers(Modifier.PUBLIC)
+                                    .addAnnotation(Override.class)
+                                    .addParameter(typeName, name)
+                                    .returns(builderClassName)
+                                    .addCode("super.$1N($1N);\nreturn this;\n", name)
+                                    .build();
+                        })
+                        .forEachOrdered(builderSpec::addMethod);
+            }
         }
     }
 
@@ -153,20 +214,12 @@ public class ProcessClassTask implements Callable<GenClass> {
 
             if (isType(member)) {
                 // TODO fork this?
-                classSpec.addType(new ProcessClassTask(this.elements, asType(member)).call().typeSpec.build());
+                classSpec.addType(new ProcessClassTask(types, this.elements, asType(member)).call().typeSpec.build());
 
             } else {
                 throw new IllegalArgumentException("unsupported " + member.getKind() + ": " + member);
             }
         }
-
-        Stream.concat(Stream.of(element.getSuperclass()), element.getInterfaces().stream())
-                .filter($ -> $.getKind() == TypeKind.DECLARED)
-                .map(MoreTypes::asTypeElement)
-                .filter($ -> $.getAnnotation(POJO.class) != null)
-                .map(ClassName::get)
-                .map($ -> resolve(elements, $))
-                .forEachOrdered(classSpec::superclass);
     }
 
     private void addField(Element member, String name, Modifier[] modifiers, TypeMirror type) {
@@ -207,7 +260,7 @@ public class ProcessClassTask implements Callable<GenClass> {
                             .addCode("this.$1N = $1N;\nreturn this;\n", name)
                             .build());
 
-            builderBuildCode.add("instance.$1N = $1N;\n", name);
+            builderFillInstance.add("instance.$1N = $1N;\n", name);
         }
     }
 

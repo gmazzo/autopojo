@@ -12,10 +12,11 @@ public class FoodTest {
 
     @Before
     public void setup() {
-        food = new Food();
-        food.setName("aName");
-        food.setQuality(1.4f);
-        food.setTastes(Arrays.asList("yummy", "good"));
+        food = new Food.Builder()
+                .name("aName")
+                .quality(1.4f)
+                .tastes(Arrays.asList("yummy", "good"))
+                .build();
     }
 
     @Test

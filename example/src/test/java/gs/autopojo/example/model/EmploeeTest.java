@@ -12,11 +12,12 @@ public class EmploeeTest {
 
     @Before
     public void setup() {
-        employee = new Employee();
-        employee.setId(101);
-        employee.setName("aName");
-        employee.setArea("anArea");
-        employee.setSubordinates(Collections.emptyList());
+        employee = new Employee.Builder()
+                .id(101)
+                .name("aName")
+                .area("anArea")
+                .subordinates(Collections.emptyList())
+                .build();
     }
 
     @Test
