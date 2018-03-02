@@ -22,7 +22,7 @@ public @interface ExtraAnnotation {
         String name() default "value";
 
         /**
-         * @see <a href="https://github.com/square/javapoet#l-for-literals">JavaPoet formats<a/>
+         * @see <a href="https://github.com/square/javapoet#l-for-literals">JavaPoet formats</a>
          */
         String format() default "$L";
 

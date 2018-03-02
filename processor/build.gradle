@@ -1,3 +1,5 @@
+apply from: '../publish.gradle'
+
 archivesBaseName = 'autopojo-processor'
 
 dependencies {

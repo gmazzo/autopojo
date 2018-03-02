@@ -1,0 +1,51 @@
+apply plugin: 'com.jfrog.bintray'
+apply plugin: 'com.github.dcendents.android-maven'
+
+def repoDesc = 'A Plain-Old-Java-Object annotation processing tool that generates code from a describing model interface'
+def repoName = 'autopojo'
+def repoUrl = "https://github.com/gmazzo/$repoName"
+def repoTags = ['java', 'annotation-processor', 'pojo', 'annotation', 'plain-objects']
+
+bintray {
+    user = System.getenv('BINTRAY_USER')
+    key = System.getenv('BINTRAY_KEY')
+
+    configurations = ['archives']
+    pkg {
+        repo = 'maven'
+        name = repoName
+        desc = repoDesc
+        vcsUrl = "${repoUrl}.git"
+        githubRepo = repoUrl.replaceFirst('\\Qhttps://github.com/\\E', '');
+        githubReleaseNotesFile = 'README.md'
+        licenses = ['MIT']
+        labels = repoTags
+        publicDownloadNumbers = true
+    }
+}
+
+install {
+    repositories.mavenInstaller {
+        pom {
+            project {
+                name repoDesc
+                url repoUrl
+            }
+        }
+    }
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+artifacts {
+    archives javadocJar
+    archives sourcesJar
+}

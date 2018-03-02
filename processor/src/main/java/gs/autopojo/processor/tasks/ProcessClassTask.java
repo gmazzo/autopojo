@@ -82,7 +82,7 @@ public class ProcessClassTask implements Callable<GenClass> {
             throwIfMissing.accept(element);
         }
         for (Element parent = element.getEnclosingElement(); isType(parent); parent = parent.getEnclosingElement()) {
-            if (parent.getAnnotation(POJO.class) == null) {
+            if (getPOJO(elements, parent) == null) {
                 throwIfMissing.accept(parent);
             }
         }

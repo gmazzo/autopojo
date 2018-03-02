@@ -1,1 +1,3 @@
-archivesBaseName = 'autopojo'
+apply from: '../publish.gradle'
+
+archivesBaseName = 'autopojo-annotations'
