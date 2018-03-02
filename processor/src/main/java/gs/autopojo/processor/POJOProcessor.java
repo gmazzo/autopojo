@@ -40,6 +40,10 @@ public class POJOProcessor extends AbstractProcessor {
                     tasks.add(scheduleTask((TypeElement) element));
                     break;
 
+                case ANNOTATION_TYPE:
+                    // TODO implement this
+                    break;
+
                 default:
                     processingEnv.getMessager()
                             .printMessage(Diagnostic.Kind.ERROR, "Not an interface", element);

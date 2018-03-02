@@ -18,19 +18,20 @@ import gs.autopojo.POJO;
 import static com.google.auto.common.MoreElements.asType;
 import static com.google.auto.common.MoreElements.getPackage;
 import static com.google.auto.common.MoreElements.isType;
+import static gs.autopojo.processor.ElementsUtils.getPOJO;
 
 final class NamesHelper {
     private static final String SUFFIX_POJO = "POJO";
 
-    public static ClassName getName(TypeElement element) {
+    public static ClassName getName(Elements elements, TypeElement element) {
         if (element == null) {
             return null;
         }
 
         ClassName parent = isType(element.getEnclosingElement()) ?
-                getName(asType(element.getEnclosingElement())) : null;
+                getName(elements, asType(element.getEnclosingElement())) : null;
 
-        POJO pojo = element.getAnnotation(POJO.class);
+        POJO pojo = getPOJO(elements, element);
         String name = pojo == null ? "" : pojo.value();
         if (name.matches("\\s*")) {
             name = getDefaultName(element, parent == null && pojo != null);
@@ -62,7 +63,7 @@ final class NamesHelper {
         if (name instanceof ClassName) {
             String qualifiedName = getQualifiedName((ClassName) name);
             TypeElement element = elements.getTypeElement(qualifiedName);
-            return (T) getName(element);
+            return (T) getName(elements, element);
 
         } else if (name instanceof TypeVariableName) {
             TypeVariableName tvName = (TypeVariableName) name;

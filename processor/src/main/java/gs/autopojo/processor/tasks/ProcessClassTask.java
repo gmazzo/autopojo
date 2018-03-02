@@ -11,6 +11,8 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeVariableName;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -19,6 +21,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import javax.annotation.Generated;
+import javax.lang.model.AnnotatedConstruct;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -42,6 +45,7 @@ import static com.google.auto.common.MoreElements.getLocalAndInheritedMethods;
 import static com.google.auto.common.MoreElements.isType;
 import static com.google.auto.common.MoreTypes.isTypeOf;
 import static gs.autopojo.processor.ElementsUtils.getFieldInitExpression;
+import static gs.autopojo.processor.ElementsUtils.getPOJO;
 import static gs.autopojo.processor.tasks.NamesHelper.getName;
 import static gs.autopojo.processor.tasks.NamesHelper.getQualifiedName;
 import static gs.autopojo.processor.tasks.NamesHelper.resolve;
@@ -65,7 +69,7 @@ public class ProcessClassTask implements Callable<GenClass> {
         this.types = types;
         this.elements = elements;
         this.element = element;
-        this.pojo = element.getAnnotation(POJO.class);
+        this.pojo = getPOJO(elements, element);
     }
 
     @Override
@@ -83,7 +87,7 @@ public class ProcessClassTask implements Callable<GenClass> {
             }
         }
 
-        className = getName(element);
+        className = getName(elements, element);
         buildClassSpec();
         buildBuilderClassSpec();
 
@@ -112,7 +116,7 @@ public class ProcessClassTask implements Callable<GenClass> {
         classSpec = TypeSpec.classBuilder(className)
                 .addOriginatingElement(element)
                 .addModifiers(collectModifiers(element, Modifier.ABSTRACT))
-                .addAnnotations(collectAnnotations(element, null))
+                .addAnnotations(collectAnnotations(element, ExtraAnnotation.ApplyOn.CLASS))
                 .addTypeVariables(classVariables)
                 .addSuperinterfaces(collectInterfaces(element));
 
@@ -124,7 +128,7 @@ public class ProcessClassTask implements Callable<GenClass> {
         TypeElement[] classSupers = Stream.concat(Stream.of(element.getSuperclass()), element.getInterfaces().stream())
                 .filter($ -> $.getKind() == TypeKind.DECLARED)
                 .map(MoreTypes::asTypeElement)
-                .filter($ -> $.getAnnotation(POJO.class) != null)
+                .filter($ -> getPOJO(elements, $) != null)
                 .toArray(TypeElement[]::new);
 
         switch (classSupers.length) {
@@ -315,7 +319,9 @@ public class ProcessClassTask implements Callable<GenClass> {
     }
 
     private List<AnnotationSpec> collectAnnotations(Element element, ExtraAnnotation.ApplyOn applyOn) {
-        List<TypeName> toRemove = Arrays.asList(TypeName.get(POJO.class), TypeName.get(Generated.class));
+        List<TypeName> toRemove = Stream.of(POJO.class, Generated.class, Target.class, Retention.class)
+                .map(TypeName::get)
+                .collect(Collectors.toList());
 
         return elements.getAllAnnotationMirrors(element).stream()
                 .flatMap($ -> expandExtraAnnotations(element, $, applyOn))
@@ -331,23 +337,34 @@ public class ProcessClassTask implements Callable<GenClass> {
     }
 
     @SuppressWarnings("unchecked")
-    private Stream<AnnotationSpec> expandExtraAnnotations(Element element, AnnotationMirror mirror, ExtraAnnotation.ApplyOn applyOn) {
+    private Stream<AnnotationSpec> expandExtraAnnotations(AnnotatedConstruct element, AnnotationMirror mirror, ExtraAnnotation.ApplyOn applyOn) {
+        Stream<AnnotationSpec> r;
+
         if (isTypeOf(ExtraAnnotations.class, mirror.getAnnotationType())) {
             ExtraAnnotations annotations = element.getAnnotation(ExtraAnnotations.class);
 
-            return Stream.of(annotations.value())
+            r = Stream.of(annotations.value())
                     .flatMap($ -> buildExtraAnnotationSpec($, applyOn));
 
         } else if (isTypeOf(ExtraAnnotation.class, mirror.getAnnotationType())) {
             ExtraAnnotation annotation = element.getAnnotation(ExtraAnnotation.class);
 
-            return buildExtraAnnotationSpec(annotation, applyOn);
+            r = buildExtraAnnotationSpec(annotation, applyOn);
+
+        } else {
+            r = Stream.of(AnnotationSpec.get(mirror));
         }
-        return Stream.of(AnnotationSpec.get(mirror));
+
+        Element mirrorElement = mirror.getAnnotationType().asElement();
+        if (mirrorElement.getAnnotation(POJO.class) != null) {
+            r = Stream.concat(r, elements.getAllAnnotationMirrors(mirrorElement).stream()
+                    .flatMap($ -> expandExtraAnnotations(mirrorElement, $, applyOn)));
+        }
+        return r;
     }
 
     private Stream<AnnotationSpec> buildExtraAnnotationSpec(ExtraAnnotation annotation, ExtraAnnotation.ApplyOn applyOn) {
-        if (applyOn == null || Arrays.asList(annotation.applyOn()).contains(applyOn)) {
+        if (annotation.applyOn().length == 0 || Arrays.asList(annotation.applyOn()).contains(applyOn)) {
             AnnotationSpec.Builder builder = AnnotationSpec.builder(ClassName.bestGuess(annotation.value()));
             for (ExtraAnnotation.Member member : annotation.members()) {
                 builder.addMember(member.name(), member.format(), member.value());

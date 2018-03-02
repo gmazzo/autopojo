@@ -15,7 +15,7 @@ public @interface ExtraAnnotation {
 
     Member[] members() default {};
 
-    ApplyOn[] applyOn() default {ApplyOn.FIELD};
+    ApplyOn[] applyOn() default {ApplyOn.CLASS, ApplyOn.FIELD};
 
     @interface Member {
 
@@ -32,7 +32,7 @@ public @interface ExtraAnnotation {
 
     enum ApplyOn {
 
-        FIELD, GETTER, SETTER
+        CLASS, FIELD, GETTER, SETTER
 
     }
 
