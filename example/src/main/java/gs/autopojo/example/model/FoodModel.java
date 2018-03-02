@@ -4,7 +4,7 @@ import java.util.List;
 
 import gs.autopojo.POJO;
 
-@POJO("Food")
+@POJO(value = "Food", builder = true)
 public interface FoodModel {
 
     String name();

@@ -5,12 +5,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)
+@Target({ElementType.TYPE, ElementType.ANNOTATION_TYPE})
 public @interface POJO {
 
     String value() default "";
 
-    boolean builder() default true;
+    boolean builder() default false;
 
 }

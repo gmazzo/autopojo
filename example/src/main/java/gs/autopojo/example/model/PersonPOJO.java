@@ -1,8 +1,6 @@
 package gs.autopojo.example.model;
 
-import gs.autopojo.POJO;
-
-@POJO
+@MyPOJOWithBuilder
 public interface PersonPOJO {
 
     int id();

@@ -25,15 +25,24 @@ import io.reactivex.Completable;
 import io.reactivex.Single;
 
 @AutoService(Processor.class)
-@SupportedAnnotationTypes("gs.autopojo.POJO")
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
+@SupportedAnnotationTypes({"gs.autopojo.POJO", "gs.autopojo.ExtraAnnotation", "gs.autopojo.ExtraAnnotations"})
 public class POJOProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        Set<? extends Element> elements = roundEnv.getElementsAnnotatedWith(POJO.class);
+        LinkedList<Completable> tasks = new LinkedList<>();
 
-        List<Completable> tasks = new LinkedList<>();
+        TypeElement pojoElement = processingEnv.getElementUtils().getTypeElement(POJO.class.getCanonicalName());
+
+        process(roundEnv, roundEnv.getElementsAnnotatedWith(POJO.class), tasks);
+
+        Completable.mergeDelayError(tasks)
+                .blockingAwait();
+        return true;
+    }
+
+    private void process(RoundEnvironment roundEnv, Set<? extends Element> elements, List<Completable> tasks) {
         for (Element element : elements) {
             switch (element.getKind()) {
                 case INTERFACE:
@@ -41,7 +50,7 @@ public class POJOProcessor extends AbstractProcessor {
                     break;
 
                 case ANNOTATION_TYPE:
-                    // TODO implement this
+                    process(roundEnv, roundEnv.getElementsAnnotatedWith((TypeElement) element), tasks);
                     break;
 
                 default:
@@ -49,10 +58,6 @@ public class POJOProcessor extends AbstractProcessor {
                             .printMessage(Diagnostic.Kind.ERROR, "Not an interface", element);
             }
         }
-
-        Completable.mergeDelayError(tasks)
-                .blockingAwait();
-        return true;
     }
 
     private Completable scheduleTask(TypeElement element) {

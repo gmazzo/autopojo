@@ -2,9 +2,7 @@ package gs.autopojo.example.model;
 
 import java.util.List;
 
-import gs.autopojo.POJO;
-
-@POJO
+@MyPOJOWithBuilder
 public interface EmployeePOJO extends PersonPOJO {
 
     String area();

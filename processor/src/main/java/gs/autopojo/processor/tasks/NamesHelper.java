@@ -18,7 +18,7 @@ import gs.autopojo.POJO;
 import static com.google.auto.common.MoreElements.asType;
 import static com.google.auto.common.MoreElements.getPackage;
 import static com.google.auto.common.MoreElements.isType;
-import static gs.autopojo.processor.ElementsUtils.getPOJO;
+import static gs.autopojo.processor.tasks.POJOHelper.getPOJO;
 
 final class NamesHelper {
     private static final String SUFFIX_POJO = "POJO";

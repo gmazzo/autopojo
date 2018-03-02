@@ -13,20 +13,20 @@ import static gs.autopojo.processor.tasks.NamesHelper.getQualifiedName;
 
 public class WriteGenClassTask implements Callable<JavaFileObject> {
     private final Filer filer;
-    private final GenClass genClass;
+    private final POJOClass pojoClass;
 
-    public WriteGenClassTask(Filer filer, GenClass genClass) {
+    public WriteGenClassTask(Filer filer, POJOClass pojoClass) {
         this.filer = filer;
-        this.genClass = genClass;
+        this.pojoClass = pojoClass;
     }
 
     @Override
     public JavaFileObject call() throws IOException {
-        String fileName = getQualifiedName(genClass.name);
+        String fileName = getQualifiedName(pojoClass.name);
 
         JavaFileObject file = filer.createSourceFile(fileName);
         try (Writer wr = file.openWriter()) {
-            JavaFile.builder(genClass.name.packageName(), genClass.typeSpec.build())
+            JavaFile.builder(pojoClass.name.packageName(), pojoClass.typeSpec.build())
                     .build()
                     .writeTo(wr);
         }

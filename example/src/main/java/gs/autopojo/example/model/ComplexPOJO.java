@@ -41,10 +41,10 @@ public interface ComplexPOJO<T extends ComplexPOJO.Models.Item> extends Cloneabl
 
     }
 
-    @POJO(builder = false)
+    @POJO
     interface Models {
 
-        @POJO
+        @POJO(builder = true)
         interface Item<K extends CharSequence & Serializable, V> extends FoodModel {
 
             Map.Entry<K, V> id();
