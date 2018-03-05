@@ -20,27 +20,20 @@ final class POJOHelper {
                 .map(AnnotationMirror::getAnnotationType)
                 .map(DeclaredType::asElement);
 
-        POJO pojo = Stream.concat(Stream.of(element), annotations.get())
+        return Stream.concat(Stream.of(element), annotations.get())
                 .map($ -> $.getAnnotation(POJO.class))
                 .filter(Objects::nonNull)
                 .findFirst()
+                .map(pojo -> annotations.get() // computes 'builder' value override
+                        .flatMap($ -> $.getAnnotationMirrors().stream())
+                        .filter($ -> isTypeOf(POJO.class, $.getAnnotationType()))
+                        .flatMap($ -> $.getElementValues().entrySet().stream())
+                        .filter($ -> $.getKey().getSimpleName().contentEquals("builder"))
+                        .map($ -> (Boolean) $.getValue().getValue())
+                        .<POJO>map($ -> new POJOImpl(pojo.value(), $))
+                        .findFirst()
+                        .orElse(pojo))
                 .orElse(null);
-
-        if (pojo != null) {
-            Boolean builderOverride = annotations.get()
-                    .flatMap($ -> $.getAnnotationMirrors().stream())
-                    .filter($ -> isTypeOf(POJO.class, $.getAnnotationType()))
-                    .flatMap($ -> $.getElementValues().entrySet().stream())
-                    .filter($ -> $.getKey().getSimpleName().contentEquals("builder"))
-                    .map($ -> (Boolean) $.getValue().getValue())
-                    .findFirst()
-                    .orElse(null);
-
-            if (builderOverride != null) {
-                pojo = new POJOImpl(pojo.value(), builderOverride);
-            }
-        }
-        return pojo;
     }
 
     private POJOHelper() {
